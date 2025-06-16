@@ -1,6 +1,5 @@
 import streamlit as st
 import json
-import pronouncing
 import requests
 from base64 import b64decode
 
@@ -50,31 +49,57 @@ language_rules = {
     }
 }
 
+# Custom CMU dictionary parser
+def load_cmudict():
+    """Load CMUdict from cmudict-0.7b file."""
+    cmudict = {}
+    with open('cmudict-0.7b', 'r', encoding='latin-1') as f:
+        for line in f:
+            if line.startswith(';;;'):
+                continue
+            parts = line.strip().split()
+            if len(parts) < 2:
+                continue
+            word = parts[0].lower()
+            phonemes = parts[1:]
+            # Remove stress markers (e.g., AA0 → AA)
+            phonemes = [p.rstrip('012') for p in phonemes]
+            if word not in cmudict:
+                cmudict[word] = []
+            cmudict[word].append(phonemes)
+    return cmudict
+
+# ARPAbet to IPA mapping
+arpabet_to_ipa = {
+    'AA': '/ɑ/', 'AE': '/æ/', 'AH': '/ə/', 'AO': '/ɔ/',
+    'AW': '/au/', 'AY': '/ai/', 'EH': '/ɛ/', 'ER': '/ɚ/',
+    'EY': '/eɪ/', 'IH': '/ɪ/', 'IY': '/i/', 'OW': '/oʊ/',
+    'OY': '/ɔɪ/', 'UH': '/ʊ/', 'UW': '/u/',
+    'P': '/p/', 'B': '/b/', 'T': '/t/', 'D': '/d/',
+    'K': '/k/', 'G': '/g/', 'M': '/m/', 'N': '/n/',
+    'NG': '/ŋ/', 'F': '/f/', 'V': '/v/', 'TH': '/θ/',
+    'DH': '/ð/', 'S': '/s/', 'Z': '/z/', 'SH': '/ʃ/',
+    'ZH': '/ʒ/', 'CH': '/tʃ/', 'JH': '/dʒ/', 'L': '/l/',
+    'R': '/r/', 'W': '/w/', 'Y': '/j/', 'HH': '/h/'
+}
+
+# Load CMUdict once
+cmudict = load_cmudict()
+
 def get_phonemes(name, language):
     """Extract phonemes based on language."""
     phonemes = []
     name = name.lower().strip()
     
     if language == 'English':
-        # Use pronouncing library for English
-        phones = pronouncing.phones_for_word(name)
-        if phones:
-            arpabet_to_ipa = {
-                'AA': '/ɑ/', 'AE': '/æ/', 'AH': '/ə/', 'AO': '/ɔ/',
-                'AW': '/au/', 'AY': '/ai/', 'EH': '/ɛ/', 'ER': '/ɚ/',
-                'EY': '/eɪ/', 'IH': '/ɪ/', 'IY': '/i/', 'OW': '/oʊ/',
-                'OY': '/ɔɪ/', 'UH': '/ʊ/', 'UW': '/u/',
-                'P': '/p/', 'B': '/b/', 'T': '/t/', 'D': '/d/',
-                'K': '/k/', 'G': '/g/', 'M': '/m/', 'N': '/n/',
-                'NG': '/ŋ/', 'F': '/f/', 'V': '/v/', 'TH': '/θ/',
-                'DH': '/ð/', 'S': '/s/', 'Z': '/z/', 'SH': '/ʃ/',
-                'ZH': '/ʒ/', 'CH': '/tʃ/', 'JH': '/dʒ/', 'L': '/l/',
-                'R': '/r/', 'W': '/w/', 'Y': '/j/', 'HH': '/h/'
-            }
-            for phone in phones[0].split():
-                phoneme = arpabet_to_ipa.get(phone.split('-')[0], '/ə/')
-                if phoneme in [entry['Phoneme'] for entry in phoneme_dataset]:
-                    phonemes.append(phoneme)
+        # Use custom CMUdict parser
+        if name in cmudict:
+            # Take the first pronunciation
+            arpabet_phones = cmudict[name][0]
+            for phone in arpabet_phones:
+                ipa_phone = arpabet_to_ipa.get(phone, '/ə/')
+                if ipa_phone in [entry['Phoneme'] for entry in phoneme_dataset]:
+                    phonemes.append(ipa_phone)
         else:
             phonemes = letter_based_phoneme_mapping(name, language)
     else:
